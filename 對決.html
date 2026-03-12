@@ -1,0 +1,399 @@
+﻿<style>
+
+body{font-family:Arial;
+color:white;background:#20242b;
+text-align:center;}
+
+#戰場{position:relative;
+background:#111;border:3px solid #555;
+margin:auto;
+overflow:hidden;}
+
+.角色{position:absolute;
+border-radius:50%;}
+
+#玩家{background:#3aa3ff;}
+#敵人{background:#ff4b4b;}
+
+#面板{margin:10px;}
+input{width:60px;}
+#UI{margin-top:10px;}
+button{font-size:16px;
+padding:8px 20px;margin:5px;}
+
+#訊息{font-size:24px;
+margin:10px;}
+
+.血條容器{ display:inline-block; 
+width:100px; height:10px;margin-bottom:5px;
+background:#555; border-radius:5px;
+overflow:hidden;}
+.血條{height:100%;
+background:#0f0;}
+
+</style>
+
+<h2>圖形對決</h2>
+
+<div id="面板">
+玩家血量 <input id="玩家血量" value="100">
+玩家攻擊 <input id="玩家攻擊" value="5">
+玩家速度 <input id="玩家速度" value="4">
+<br>
+敵人血量 <input id="敵人血量" value="100">
+敵人攻擊 <input id="敵人攻擊" value="3">
+敵人速度 <input id="敵人速度" value="2">
+</div>
+
+<div id="UI">
+<button onclick="開始遊戲()">開始遊戲</button>
+<button onclick="結束遊戲()">結束遊戲</button>
+<div>
+玩家血量: <div class="血條容器"><div id="玩家血條" class="血條"></div></div>
+敵人血量: <div class="血條容器"><div id="敵人血條" class="血條"></div></div>
+</div>
+</div>
+
+<div id="訊息"></div>
+
+<div id="戰場">
+<div id="玩家" class="角色"></div>
+<div id="敵人" class="角色"></div>
+</div>
+
+<script>
+
+/* 格式
+
+網頁
+├ HTML
+│  ├ 界面 (調整屬性)
+│  │  ├ 玩家屬性
+│  │  └ 敵人屬性
+│  ├ 按鈕
+│  │  ├ 開始
+│  │  └ 結束
+│  └ 戰場
+│     ├ 玩家圖形
+│     └ 敵人圖形
+│ 
+├ CSS
+│  └ 角色樣式
+│     ├ 玩家圖形
+│     └ 敵人圖形
+│
+└ JS
+   ├ 物件
+   │  ├ 玩家物件
+   │  └ 敵人物件
+   ├ 行為 移動&攻擊
+   │  ├ 玩家移動
+   │  └ 敵人移動/追蹤
+   ├ 血量
+   └ UI更新 / 循環
+
+*/
+
+/* 更新
+
+更新
+├ ⚔️ 攻擊系統 Combat
+│  ├ 🔫 子彈系統 Projectile
+│  │  ├ 滑鼠攻擊 → 遠程子彈
+│  │  ├ 方向 Direction & 位置 Position
+│  │  ├ 傷害 Damage & 速度 Speed
+│  │  ├ 冷卻 Cooldown
+│  │  └ 存活時間 Lifetime
+│  │
+│  ├ 🧮 傷害計算
+│  │  └ 擊中判定
+│  │
+│  └ 💥 攻擊特效 Effects
+│     ├ 擊中 → 變色
+│     ├ 爆炸 → 放大
+│     └ 透明 → 消失
+│
+├  👾 敵人行為系統 Enemy
+│   ├ 敵人生成 Spawn
+│   ├ 多敵人同時存在
+│   ├ 追蹤玩家
+│   ├ 敵人攻擊
+│   └ 敵人死亡
+├ 📦 經濟系統 Economy
+│  ├ 隨機掉落 → 金幣
+│  └ 物品商店 Shop
+├ 📈 成長系統 Progression
+│  ├ 等級系統 Level
+│  ├ 技能系統 Skill
+│  └ 升級系統
+│     └ 金幣 → 升級攻擊
+├ 🔊音效 Audio
+├ 📊 UI 系統
+│  ├ ❤️ HP 血條
+│  ├ 💰 金幣顯示
+│  ├ ⌛ 技能 CD
+│  └ 📊 屬性面板
+│      └ 即時修改屬性
+├ 🔍 預覽模式 Preview
+│  ├ 玩家可移動
+│  ├ 無攻擊
+│  ├ 修改屬性
+│  ├ 自訂座標
+│  └ 可選 是否開啟 AI
+├ ⚙️按鍵系統
+│  ├─ 點擊 → 觸發技能 衝刺
+│  ├─ 冷卻
+│  └─ 自訂鍵位
+├ 職業系統 Class
+│  ├─ 亡靈法師（輔助） → 召喚亡靈
+│  └─ 維修師（輔助） → 修復/回收
+│
+├ ⏸ 遊戲狀態
+│  ├ 暫停模式 Pause
+│  └ 生存模式 Survival
+│       └ 逃亡 10 秒
+└ 💾存檔 Save
+   └─ 玩家
+        ├─ 資料/資訊 (Data/State)
+        │    ├─ 位置 Position
+        │    ├─ 速度 Speed
+        │    ├─ 屬性 HP
+        │    ├─ 狀態 State
+        │    ├─ 等級 Level
+        │    ├─ 技能 Skills
+        │    ├─ 金幣 Gold
+        │    └─ 進度 Progress
+        └─ 功能 (Function/Action)
+             ├─ 移動 Move
+             ├─ 攻擊 Attack
+             ├─ 技能 Skill
+             └─ 升級 Upgrade
+
+
+順序
+1  玩家移動
+2  敵人生成
+3  敵人AI追蹤
+4  子彈系統
+5  碰撞判定
+6  敵人死亡
+7  掉落金幣
+8  UI
+9  升級
+10 技能
+音效
+特效
+職業
+商店
+存檔
+
+// 代碼
+
+💾存檔
+localStorage.setItem("save", JSON.stringify(player))
+
+if(按鍵["Space"]){ 攻擊() } // 空白鍵 → 發射子彈
+if(按鍵["KeyQ"]) 技能()
+if(按鍵["ShiftLeft"]) 玩家.速度=8
+
+*/
+
+const 參數 = {地圖:{寬:600,高:400},
+玩家:{x:50,y:180,
+血量:100,攻擊:5,速度:4,大小:40},
+敵人:{x:500,y:180,
+血量:100,攻擊:3,速度:2,大小:40},
+}
+
+let 玩家={...參數.玩家};
+let 敵人={...參數.玩家};
+
+let 遊戲中=false;
+
+let 玩家元素=document.getElementById("玩家");
+let 敵人元素=document.getElementById("敵人");
+let 訊息=document.getElementById("訊息");
+let 玩家血條=document.getElementById("玩家血條");
+let 敵人血條=document.getElementById("敵人血條");
+
+const 戰場 = document.getElementById("戰場");
+戰場.style.width = 參數.地圖.寬 + "px";
+戰場.style.height = 參數.地圖.高 + "px";
+
+function 套用面板(){
+玩家={...玩家, 
+血量: parseInt(玩家血量.value), 
+攻擊: parseInt(玩家攻擊.value), 
+速度: parseInt(玩家速度.value) 
+};
+
+敵人={...敵人, 
+血量: parseInt(敵人血量.value), 
+攻擊: parseInt(敵人攻擊.value), 
+速度: parseInt(敵人速度.value) 
+};
+}
+
+function 開始遊戲(){套用面板();
+玩家={ ...玩家, x: 參數.玩家.x, y: 參數.玩家.y };
+敵人={ ...敵人, x: 參數.敵人.x, y: 參數.敵人.y };
+
+遊戲中=true;
+訊息.innerText="戰鬥開始";
+
+更新();}
+
+function 結束遊戲(){遊戲中=false;
+訊息.innerText="遊戲結束";}
+
+function 更新(){if(!遊戲中) return;
+玩家移動();
+敵人AI();
+碰撞判定();
+畫面更新();
+更新UI();
+requestAnimationFrame(更新);
+}
+
+let 按鍵={};
+document.addEventListener("keydown",e=>{按鍵[e.code]=true});
+document.addEventListener("keyup",e=>{按鍵[e.code]=false});
+
+let 鍵位 = {
+上: ["KeyW", "ArrowUp","Numpad8"],
+下: ["KeyS", "ArrowDown", "Numpad2"],
+左: ["KeyA", "ArrowLeft", "Numpad4"],
+右: ["KeyD", "ArrowRight", "Numpad6"],
+右上: ["Numpad9"],
+左上: ["Numpad7"],
+右下: ["Numpad3"],
+左下: ["Numpad1"]
+}
+
+/* 鍵位表(MD)
+
+| 鍵位 | e.key | e.code | keyCode(舊) |
+|-|-|-|-|
+| W | w / W | KeyW | 87 |
+| A | a / A | KeyA | 65 |
+| S | s / S | KeyS | 83 |
+| D | d / D | KeyD | 68 |
+| ↑ | ArrowUp | ArrowUp | 38 |
+| ← | ArrowLeft | ArrowLeft | 37 |
+| ↓ | ArrowDown | ArrowDown | 40 |
+| → | ArrowRight | ArrowRight | 39 |
+| 空白 | Space | Space | 32 |
+| Shift | Shift | ShiftLeft / ShiftRight | 16 |
+| Ctrl | Control | ControlLeft / ControlRight | 17 |
+| Alt | Alt | AltLeft / AltRight | 18 |
+| Enter | Enter | Enter | 13 |
+| Esc | Escape | Escape | 27 |
+
+| 動作 | 鍵盤 | e.code |
+|-----|------|-------|
+| 上 | W | KeyW |
+| 上 | ↑ | ArrowUp |
+| 上 | 數字鍵盤8 | Numpad8 |
+| 下 | S | KeyS |
+| 下 | ↓ | ArrowDown |
+| 左 | A | KeyA |
+| 左 | ← | ArrowLeft |
+| 右 | D | KeyD |
+| 右 | → | ArrowRight |
+
+## 方向控制鍵
+
+| 動作 | 鍵盤 | e.code |
+|-----|------|-------|
+| 上 | W | KeyW |
+| 上 | ↑ | ArrowUp |
+| 上 | 數字鍵盤8 | Numpad8 |
+| 下 | S | KeyS |
+| 下 | ↓ | ArrowDown |
+| 下 | 數字鍵盤2 | Numpad2 |
+| 左 | A | KeyA |
+| 左 | ← | ArrowLeft |
+| 左 | 數字鍵盤4 | Numpad4 |
+| 右 | D | KeyD |
+| 右 | → | ArrowRight |
+| 右 | 數字鍵盤6 | Numpad6 |
+
+| 鍵盤 | e.code |
+|----|-------|
+| 0 | Numpad0 |
+| 1 | Numpad1 |
+| 2 | Numpad2 |
+| 3 | Numpad3 |
+| 4 | Numpad4 |
+| 5 | Numpad5 |
+| 6 | Numpad6 |
+| 7 | Numpad7 |
+| 8 | Numpad8 |
+| 9 | Numpad9 |
+| + | NumpadAdd |
+| - | NumpadSubtract |
+| * | NumpadMultiply |
+| / | NumpadDivide |
+| . | NumpadDecimal |
+| Enter | NumpadEnter |
+
+*/
+
+function 按下(...keys){  return keys.flat().some(k => 按鍵[k]);}
+
+function 玩家移動(){
+let[dx, dy]=[按下(鍵位.右)-按下(鍵位.左), 按下(鍵位.下)-按下(鍵位.上)];
+let d = Math.hypot(dx, dy)||1;
+
+let{x,y,速度}=玩家;
+[x,y]=[x+dx/d*速度,y+dy/d*速度];
+玩家={...玩家,x,y};
+
+限制範圍(玩家);}
+
+function 敵人AI(){
+let dx=玩家.x-敵人.x;
+let dy=玩家.y-敵人.y;
+let 距離=Math.sqrt(dx*dx+dy*dy);
+
+if(距離>0){
+敵人.x+=dx/距離*敵人.速度;
+敵人.y+=dy/距離*敵人.速度;
+}
+
+限制範圍(敵人);}
+
+function 限制範圍(角色){
+if(角色.x<0)角色.x=0;if(角色.y<0)角色.y=0;
+if(角色.x>600-角色.大小)角色.x=600-角色.大小;
+if(角色.y>400-角色.大小)角色.y=400-角色.大小;
+}
+
+function 碰撞判定(){
+let dx=玩家.x-敵人.x;let dy=玩家.y-敵人.y;
+let 距離=Math.sqrt(dx*dx+dy*dy);
+
+if(距離<40){
+玩家.血量-=敵人.攻擊;敵人.血量-=玩家.攻擊;}
+
+玩家.血量 = Math.max(玩家.血量,0);
+敵人.血量 = Math.max(敵人.血量,0);
+
+if(玩家.血量<=0){訊息.innerText="玩家死亡";結束遊戲();}
+if(敵人.血量<=0){訊息.innerText="敵人死亡";結束遊戲();}
+}
+
+function 更新UI(){
+Object.entries({ 玩家血條: 玩家.血量, 敵人血條: 敵人.血量 })
+.forEach(([元素, 值]) => window[元素].style.width = `${值}px`);}
+
+function 更新元素位置(元素,{x,y,大小 }){
+Object.entries({left:x,top:y,width:大小,height:大小})
+.forEach(([樣式, 值])=>元素.style[樣式]=`${值}px`);}
+
+function 畫面更新(){
+更新元素位置(玩家元素, 玩家);
+更新元素位置(敵人元素, 敵人);
+}
+
+</script>
