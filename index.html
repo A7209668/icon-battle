@@ -1,0 +1,548 @@
+<style>
+    body {
+        font-family: Arial;
+        color: white;
+        background: #20242b;
+        text-align: center;
+    }
+
+    #戰場 {
+        position: relative;
+        background: #111;
+        border: 3px solid #555;
+        margin: auto;
+        overflow: hidden;
+    }
+
+    .角色 {
+        position: absolute;
+        border-radius: 50%;
+    }
+
+    #玩家 {
+        background: #3aa3ff;
+    }
+
+    #敵人 {
+        background: #ff4b4b;
+    }
+
+    #面板 {
+        margin: 10px;
+    }
+
+    input {
+        width: 60px;
+    }
+
+    #UI {
+        margin-top: 10px;
+    }
+
+    button {
+        font-size: 16px;
+        padding: 8px 20px;
+        margin: 5px;
+    }
+
+    #訊息 {
+        font-size: 24px;
+        margin: 10px;
+    }
+
+    .血條容器 {
+        display: inline-block;
+        width: 100px;
+        height: 10px;
+        margin-bottom: 5px;
+        background: #555;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+
+    .血條 {
+        height: 100%;
+        background: #0f0;
+    }
+
+    .子彈 {
+        position: absolute;
+        background: yellow;
+        border-radius: 50%;
+        pointer-events: none;
+        /* 子彈不會干擾滑鼠 */
+    }
+
+    #子彈層 {
+        position: relative;
+        width: 600px;
+        /* 與戰場相同 */
+        height: 400px;
+        overflow: hidden;
+    }
+</style>
+
+<h2>圖形對決</h2>
+
+<div id="面板">
+    玩家血量 <input id="玩家血量" value="100">
+    玩家攻擊 <input id="玩家攻擊" value="5">
+    玩家速度 <input id="玩家速度" value="4">
+    <br>
+    敵人血量 <input id="敵人血量" value="100">
+    敵人攻擊 <input id="敵人攻擊" value="3">
+    敵人速度 <input id="敵人速度" value="2">
+</div>
+
+<div id="UI">
+    <button onclick="開始遊戲()">開始遊戲</button>
+    <button onclick="結束遊戲()">結束遊戲</button>
+    <button onclick="存檔()">💾存檔</button>
+    <button onclick="讀檔()">💾讀檔</button>
+
+    <div>
+        玩家血量: <div class="血條容器">
+            <div id="玩家血條" class="血條"></div>
+        </div>
+        敵人血量: <div class="血條容器">
+            <div id="敵人血條" class="血條"></div>
+        </div>
+    </div>
+</div>
+
+<div id="訊息"></div>
+
+<div id="戰場">
+    <div id="玩家" class="角色"></div>
+    <div id="敵人" class="角色"></div>
+    <div id="子彈層"></div>
+
+</div>
+
+
+<script>
+
+    // 初始化
+
+    const 參數 = {
+        地圖: { 寬: 600, 高: 400 },
+        玩家: {
+            x: 50, y: 180,
+            血量: 100, 攻擊: 5, 速度: 4, 大小: 120
+        },
+        敵人: {
+            x: 500, y: 180,
+            血量: 100, 攻擊: 3, 速度: 2, 大小: 40
+        },
+    }
+
+    let 遊戲中 = false;
+
+    let 玩家 = { ...參數.玩家, 最大血量: 參數.玩家.血量 };
+    let 敵人 = { ...參數.敵人, 最大血量: 參數.敵人.血量 };
+
+    // DOM 
+
+    const UI = {
+        玩家: {
+            血量: document.querySelector("#玩家血量"),
+            攻擊: document.querySelector("#玩家攻擊"),
+            速度: document.querySelector("#玩家速度"),
+        },
+        敵人: {
+            血量: document.querySelector("#敵人血量"),
+            攻擊: document.querySelector("#敵人攻擊"),
+            速度: document.querySelector("#敵人速度"),
+        },
+        血條: {
+            玩家: document.getElementById("玩家血條"),
+            敵人: document.getElementById("敵人血條")
+        },
+
+        訊息: document.getElementById("訊息"),
+        開始: document.getElementById("開始"),
+        結束: document.getElementById("結束"),
+        存檔: document.getElementById("存檔"),
+        讀檔: document.getElementById("讀檔")
+    };
+
+    function 同步UI() {
+        UI.玩家.血量.value = 玩家.血量;
+        UI.玩家.攻擊.value = 玩家.攻擊;
+        UI.玩家.速度.value = 玩家.速度;
+
+        UI.敵人.血量.value = 敵人.血量;
+        UI.敵人.攻擊.value = 敵人.攻擊;
+        UI.敵人.速度.value = 敵人.速度;
+    }
+
+    function 更新血條() {
+        function 設定顏色(el, 比例) { el.style.background = 比例 > 0.5 ? "#0f0" : 比例 > 0.25 ? "#ff0" : "#f00"; }
+        const 玩家比例 = 玩家.血量 / 玩家.最大血量;
+        const 敵人比例 = 敵人.血量 / 敵人.最大血量;
+        UI.血條.玩家.style.width = `${玩家比例 * 100}%`;
+        UI.血條.敵人.style.width = `${敵人比例 * 100}%`;
+        設定顏色(UI.血條.玩家, 玩家比例);
+        設定顏色(UI.血條.敵人, 敵人比例);
+    }
+
+
+    function 設定血條顏色(元素, 比例) {
+        if (比例 > 0.5) 元素.style.background = "#0f0";
+        else if (比例 > 0.25) 元素.style.background = "#ff0";
+        else 元素.style.background = "#f00";
+    }
+
+
+    let 最後dx = 0;
+    let 最後dy = 0;
+
+
+    let 玩家元素 = document.getElementById("玩家");
+    let 敵人元素 = document.getElementById("敵人");
+
+
+    const 戰場 = document.getElementById("戰場");
+    戰場.style.width = `${參數.地圖.寬}px`;
+    戰場.style.height = `${參數.地圖.高}px`;
+
+
+
+    function 套用面板() {
+        玩家 = {
+            ...玩家,
+            血量: parseInt(UI.玩家.血量.value),
+            最大血量: parseInt(UI.玩家.血量.value),
+            攻擊: parseInt(UI.玩家.攻擊.value),
+            速度: parseInt(UI.玩家.速度.value)
+        };
+
+        敵人 = {
+            ...敵人,
+            血量: parseInt(UI.敵人.血量.value),
+            最大血量: parseInt(UI.敵人.血量.value),
+            攻擊: parseInt(UI.敵人.攻擊.value),
+            速度: parseInt(UI.敵人.速度.value)
+        };
+    }
+
+    function 開始遊戲() {
+        套用面板();
+        玩家 = { ...玩家, x: 參數.玩家.x, y: 參數.玩家.y };
+        敵人 = { ...敵人, x: 參數.敵人.x, y: 參數.敵人.y };
+
+        同步UI();
+
+        遊戲中 = true;
+        訊息.innerText = "戰鬥開始";
+
+        更新();
+    }
+
+    function 結束遊戲() {
+        遊戲中 = false;
+        訊息.innerText = "遊戲結束";
+    }
+
+
+
+    // 輸入系統
+
+    let 按鍵 = {};
+    document.addEventListener("keydown", e => { 按鍵[e.code] = true });
+    document.addEventListener("keyup", e => { 按鍵[e.code] = false });
+
+    function 按下(...keys) { return keys.flat().some(k => 按鍵[k]); }
+
+
+    let 鍵位 = {
+        上: ["KeyW", "ArrowUp", "Numpad8"],
+        下: ["KeyS", "ArrowDown", "Numpad2"],
+        左: ["KeyA", "ArrowLeft", "Numpad4"],
+        右: ["KeyD", "ArrowRight", "Numpad6"],
+        右上: ["Numpad9"],
+        左上: ["Numpad7"],
+        右下: ["Numpad3"],
+        左下: ["Numpad1"]
+    }
+
+    let 衝刺中 = 0, 衝刺冷卻 = 0;
+
+    let 主要技能模式 = "衝刺";
+    let 子彈列表 = [];
+    let 子彈冷卻 = 0;
+
+
+    document.addEventListener("keydown", e => {
+        if (e.code === "Space") 使用技能();
+        if (e.code === "KeyQ") {
+            主要技能模式 = (主要技能模式 === "衝刺") ? "發射子彈" : "衝刺";
+            訊息.innerText = "技能: " + 主要技能模式;
+        }
+    });
+
+
+    function 使用技能() {
+        if (主要技能模式 === "衝刺") 衝刺(最後dx, 最後dy);
+        if (主要技能模式 === "發射子彈") 發射子彈();
+    }
+
+    function 衝刺(dx, dy) {
+        if (衝刺冷卻 > 0) return;
+        if (dx === 0 && dy === 0) return; // ❗限制
+        衝刺中 = 10;     // 持續幀數
+        衝刺冷卻 = 60;   // 冷卻
+        // 預留特效
+    }
+
+
+    function 發射子彈() {
+        if (子彈冷卻 > 0) return;
+        子彈冷卻 = 20; // 子彈冷卻約0.3秒
+
+        let d = Math.hypot(最後dx, 最後dy) || 1;
+
+        if (最後dx === 0 && 最後dy === 0) {
+            最後dx = 1; // 預設向右
+        }
+
+        子彈列表.push({
+            x: 玩家.x + 玩家.大小 / 2,
+            y: 玩家.y + 玩家.大小 / 2,
+            dx: 最後dx / d,
+            dy: 最後dy / d,
+            速度: 8,
+            大小: 10
+        });
+
+    }
+
+    function 更新子彈() {
+        子彈列表.forEach(b => {
+            b.x += b.dx * b.速度;
+            b.y += b.dy * b.速度;
+
+            let { 距離平方 } = 距離與方向(b.x, b.y, 敵人.x, 敵人.y);
+
+            if (距離平方 < ((敵人.大小 + b.大小) / 2) ** 2) {
+                敵人.血量 -= 玩家.攻擊 * 2;
+                b.擊中 = true;
+            }
+            if (b.x < 0 || b.x > 參數.地圖.寬 || b.y < 0 || b.y > 參數.地圖.高) {
+                b.擊中 = true;
+            }
+        });
+
+        子彈列表 = 子彈列表.filter(b => !b.擊中);
+    }
+
+    let 子彈層 = document.getElementById("子彈層");
+
+    const 子彈管理 = {
+        層: document.getElementById("子彈層"),
+        元素列表: [],
+
+        同步DOM: function (子彈列表) {
+            // 創建或刪除 DOM
+            while (this.元素列表.length < 子彈列表.length) {
+                const el = document.createElement("div");
+                el.className = "子彈";
+                this.層.appendChild(el);
+                this.元素列表.push(el);
+            }
+            while (this.元素列表.length > 子彈列表.length) {
+                const el = this.元素列表.pop();
+                el.remove();
+            }
+
+            const now = Date.now() * 0.005; // 動態動畫時間
+
+            // 更新位置
+            子彈列表.forEach((b, i) => {
+                const el = this.元素列表[i];
+                const 動態大小 = b.大小 + Math.sin(now + i) * 3; // 微幅跳動
+                el.style.width = b.大小 + "px";
+                el.style.height = b.大小 + "px";
+                el.style.transform = `translate(${b.x}px, ${b.y}px) scale(${動態大小 / 5})`;
+            });
+        }
+    };
+
+    function 距離與方向(x1, y1, x2, y2) {
+        let [dx, dy] = [x2 - x1, y2 - y1];
+        let 距離平方 = dx * dx + dy * dy;
+        let 距離 = Math.sqrt(距離平方) || 1;
+        return { dx, dy, 距離, 距離平方, nx: dx / 距離, ny: dy / 距離 };
+    }
+
+    function 限制範圍(角色) {
+        角色.x = Math.max(0, Math.min(角色.x, 參數.地圖.寬 - 角色.大小));
+        角色.y = Math.max(0, Math.min(角色.y, 參數.地圖.高 - 角色.大小));
+    }
+
+    function 玩家移動() {
+        let [dx, dy] = [按下(鍵位.右) - 按下(鍵位.左), 按下(鍵位.下) - 按下(鍵位.上)];
+        if (dx === 0 && dy === 0) return;
+        最後dx = dx;
+        最後dy = dy;
+
+        let d = Math.hypot(dx, dy) || 1;
+
+        let 移動距離 = 玩家.速度;
+        // let 移動距離 = 玩家.速度 * (衝刺中>0?3:1);
+
+        if (按下("ShiftLeft")) { 衝刺(dx, dy); }
+
+        if (衝刺中 > 0) {
+            移動距離 *= 3;
+            衝刺中--;
+        }
+
+        let { x, y, 速度 } = 玩家;
+        [x, y] = [x + dx / d * 移動距離, y + dy / d * 移動距離];
+        玩家 = { ...玩家, x, y };
+
+        // 衝刺中 = Math.max(0, 衝刺中-1);
+
+        限制範圍(玩家);
+    }
+
+    function 敵人AI() {
+        let { nx, ny, 距離 } = 距離與方向(敵人.x, 敵人.y, 玩家.x, 玩家.y);
+
+        if (距離 > 0) {
+            敵人.x += nx * 敵人.速度;
+            敵人.y += ny * 敵人.速度;
+        }
+
+        限制範圍(敵人);
+    }
+
+
+    function 碰撞判定() {
+
+        let [玩家中心X, 玩家中心Y] = [玩家.x + 玩家.大小 / 2, 玩家.y + 玩家.大小 / 2];
+        let [敵人中心X, 敵人中心Y] = [敵人.x + 敵人.大小 / 2, 敵人.y + 敵人.大小 / 2];
+
+        let { dx, dy, 距離, 距離平方, nx, ny } =
+            距離與方向(敵人中心X, 敵人中心Y, 玩家中心X, 玩家中心Y);
+
+        let 半徑和 = (玩家.大小 + 敵人.大小) / 2;
+
+        if (距離平方 < (半徑和 * 半徑和)) {
+            玩家.血量 -= 敵人.攻擊; 敵人.血量 -= 玩家.攻擊;
+
+            let 推力 = 20;
+            玩家.x += nx * 推力;
+            玩家.y += ny * 推力;
+            // 預留反彈 / 推開特效
+
+        }
+
+        玩家.血量 = Math.max(玩家.血量, 0);
+        敵人.血量 = Math.max(敵人.血量, 0);
+
+        if (玩家.血量 <= 0) { 訊息.innerText = "玩家死亡"; 結束遊戲(); }
+        if (敵人.血量 <= 0) { 訊息.innerText = "敵人死亡"; 結束遊戲(); }
+    }
+
+    function 更新() {
+        if (!遊戲中) return;
+        玩家移動();
+        敵人AI();
+        碰撞判定();
+        更新子彈();
+        更新冷卻();
+        畫面更新();
+        更新UI();
+        requestAnimationFrame(更新);
+    }
+
+    function 畫面更新() {
+        更新元素位置(玩家元素, 玩家);
+        更新元素位置(敵人元素, 敵人);
+        子彈管理.同步DOM(子彈列表);
+    }
+
+
+    function 更新元素位置(元素, { x, y, 大小 }) {
+        //  元素.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+        Object.entries({ left: x, top: y, width: 大小, height: 大小 })
+            .forEach(([樣式, 值]) => 元素.style[樣式] = `${值}px`);
+    }
+
+
+    function 更新冷卻() {
+        if (衝刺冷卻 > 0) 衝刺冷卻--;
+        if (子彈冷卻 > 0) 子彈冷卻--;
+    }
+
+    function 更新UI() {
+        const 玩家最大血量 = 參數.玩家.血量;
+        const 敵人最大血量 = 參數.敵人.血量;
+
+        const 血條列表 = {
+            玩家血條: { 目前: 玩家.血量, 最大: 玩家.最大血量 },
+            敵人血條: { 目前: 敵人.血量, 最大: 敵人.最大血量 }
+        };
+
+        Object.entries(血條列表).forEach(([id, { 目前, 最大 }]) => {
+            const 比例 = 最大 > 0 ? 目前 / 最大 : 0;
+            document.getElementById(id).style.width = `${比例 * 100}%`
+        });
+
+        let p = 玩家.血量 / 玩家最大血量;
+        let e = 敵人.血量 / 敵人最大血量;
+
+        設定血條顏色(玩家血條, p);
+        設定血條顏色(敵人血條, e);
+    }
+
+
+
+    function 存檔() {
+        const 存檔資料 = {
+            玩家: { ...玩家 },
+            敵人: { ...敵人 }
+        };
+
+        localStorage.setItem("遊戲存檔", JSON.stringify(存檔資料));
+
+        訊息.innerText = "已存檔 ✅";
+    }
+
+    function 讀檔() {
+        const 資料 = localStorage.getItem("遊戲存檔");
+        if (資料) {
+            const { 玩家: p, 敵人: e } = JSON.parse(資料);
+            if (p && e) {
+                玩家 = { ...玩家, ...p };
+                敵人 = { ...敵人, ...e };
+            }
+
+            // 更新畫面
+            更新元素位置(玩家元素, 玩家);
+            更新元素位置(敵人元素, 敵人);
+            同步UI();
+            更新UI();
+
+            訊息.innerText = "讀檔完成 ✅";
+        }
+        else { 訊息.innerText = "沒有存檔 ❌"; }
+    }
+
+    function 綁定(輸入框, 物件, 屬性) {
+        輸入框.addEventListener("input", () => {
+            物件[屬性] = parseInt(輸入框.value) || 0;
+            if (屬性 === "血量") 物件.最大血量 = 物件[屬性];
+        });
+    }
+
+    綁定(UI.玩家.血量, 玩家, "血量");
+    綁定(UI.玩家.攻擊, 玩家, "攻擊");
+    綁定(UI.玩家.速度, 玩家, "速度");
+
+    綁定(UI.敵人.血量, 敵人, "血量");
+    綁定(UI.敵人.攻擊, 敵人, "攻擊");
+    綁定(UI.敵人.速度, 敵人, "速度");
+</script>
